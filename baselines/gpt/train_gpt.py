@@ -22,9 +22,9 @@ torch.manual_seed(SEED)
 # Argument parsing
 parser = argparse.ArgumentParser(description='Train the gpt model')
 parser.add_argument('--dataset', type=str,
-                    default='mimiciii', help="Dataset name")
+                    default='synthea', help="Dataset name")
 parser.add_argument('--dataset_version', type=str,
-                    default='1.4', help="Dataset version")
+                    default='1k', help="Dataset version")
 parser.add_argument('--total_vocab_size', type=int, default=7014)
 parser.add_argument('--code_vocab_size', type=int, default=6984)
 parser.add_argument('--label_vocab_size', type=int, default=25)
