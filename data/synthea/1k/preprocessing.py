@@ -1,22 +1,66 @@
 import pandas as pd
 import os
+from sqlalchemy import create_engine
 
-def data_preprocessing(data_path,omop_path, save_csv=True):
+def OMOP_to_ICD9_conversion(args=None, db_name="postgres", db_config=None,save_csv=True):
 
-    concept_file = os.path.join(omop_path,'CONCEPT.csv')
-    concept_relationship_file = os.path.join(omop_path,'CONCEPT_RELATIONSHIP.csv')
-    condition_occurrence_file = os.path.join(data_path,'condition_occurrence.csv')
-    visit_occurrence_file = os.path.join(data_path,'visit_occurrence.csv')
+    db_connection = db_config["db"]
 
-    # Load data
-    df_concept = pd.read_csv(concept_file,sep="\t", dtype=str)
-    df_cond_occurence = pd.read_csv(condition_occurrence_file,dtype=str)
-    df_concept_relationship = pd.read_csv(concept_relationship_file,sep="\t", dtype=str)
-    df_visit_oocurrence = pd.read_csv(visit_occurrence_file,dtype=str)
+    if db_name=='csv':
+        # CSV Mode
+        omop_vocabs_path = f"data/{args.dataset}/{args.dataset_version}/"+db_config["csv"]["omopvocabsfolderpath"]
+        input_data_path = f"data/{args.dataset}/{args.dataset_version}/"+db_config["csv"]["inputdatafolderpath"]
 
-    # Ensure both keys are the same type
-    df_cond_occurence["condition_concept_id"] = df_cond_occurence["condition_concept_id"].astype(str)
-    df_concept["concept_id"] = df_concept["concept_id"].astype(str)
+        concept_file = os.path.join(omop_vocabs_path, 'CONCEPT.csv')
+        concept_relationship_file = os.path.join(omop_vocabs_path, 'CONCEPT_RELATIONSHIP.csv')
+        condition_occurrence_file = os.path.join(input_data_path, 'condition_occurrence.csv')
+        visit_occurrence_file = os.path.join(input_data_path, 'visit_occurrence.csv')
+
+        # Load data from CSV
+        df_concept = pd.read_csv(concept_file, sep="\t", dtype=str)
+        df_cond_occurence = pd.read_csv(condition_occurrence_file, dtype=str)
+        df_concept_relationship = pd.read_csv(concept_relationship_file, sep="\t", dtype=str)
+        df_visit_occurrence = pd.read_csv(visit_occurrence_file, dtype=str)
+
+    elif db_name=='postgres':
+        # Database Mode
+        try:
+            db_engine = create_engine(f"postgresql+psycopg2://{db_connection['user']}:{db_connection['password']}@{db_connection['host']}:{db_connection['port']}/{db_connection['database']}")
+            print("Database connection established successfully!")
+        except Exception as e:
+            print(f"Error connecting to the database: {e}")
+            return None
+
+        query_concept = "SELECT * FROM \"CONCEPT\";"
+        query_concept_relationship = "SELECT * FROM \"CONCEPT_RELATIONSHIP\";"
+        query_condition_occurrence = "SELECT * FROM \"condition_occurrence\";"
+        query_visit_occurrence = "SELECT * FROM \"visit_occurrence\";"
+
+        # Load data from Database
+        df_concept = pd.read_sql(query_concept, db_engine)
+        df_concept_relationship = pd.read_sql(query_concept_relationship, db_engine)
+        df_cond_occurence = pd.read_sql(query_condition_occurrence, db_engine)
+        df_visit_occurrence = pd.read_sql(query_visit_occurrence, db_engine)
+    elif db_name=='sql':
+        # Database Mode
+        try:
+            db_engine = create_engine(f"mysql+mysqldb://{db_connection['user']}:{db_connection['password']}@{db_connection['host']}:{db_connection['port']}/{db_connection['database']}")
+            print("Database connection established successfully!")
+        except Exception as e:
+            print(f"Error connecting to the database: {e}")
+            return None
+
+        query_concept = "SELECT * FROM concept;"
+        query_concept_relationship = "SELECT * FROM concept_relationship;"
+        query_condition_occurrence = "SELECT * FROM condition_occurrence;"
+        query_visit_occurrence = "SELECT * FROM visit_occurrence;"
+
+        # Load data from Database
+        df_concept = pd.read_sql(query_concept, db_engine)
+        df_concept_relationship = pd.read_sql(query_concept_relationship, db_engine)
+        df_cond_occurence = pd.read_sql(query_condition_occurrence, db_engine)
+        df_visit_occurrence = pd.read_sql(query_visit_occurrence, db_engine)
+
 
     # Step 1: Filter df_concept to only ICD-9 concepts
     icd9_concepts = df_concept[df_concept['vocabulary_id'] == 'ICD9CM']
@@ -84,7 +128,7 @@ def data_preprocessing(data_path,omop_path, save_csv=True):
 
     # Merge the merged_df with visit_occurrence based on visit_occurrence_id
     merged_df_with_visit = merged_df.merge(
-        df_visit_oocurrence, 
+        df_visit_occurrence, 
         on='visit_occurrence_id',  # Merge on visit_occurrence_id
         how='left'  # or 'inner' depending on your requirements
     ).drop(columns=['person_id_y']).rename(columns={'person_id_x': 'person_id', 'concept_code_y': 'ICD9_CODE', 'concept_name_y': 'visit_concept_name'})
