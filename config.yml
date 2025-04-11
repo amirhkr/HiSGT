@@ -1,7 +1,7 @@
 app:
   name: hisgt
   version: 1.0.0
-  db_name: "postgres"
+  data_source: "csv"
 db:
   host: localhost
   port: 5432

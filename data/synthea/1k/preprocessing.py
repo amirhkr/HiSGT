@@ -15,12 +15,14 @@ def OMOP_to_ICD9_conversion(args=None, db_name="postgres", db_config=None,save_c
         concept_relationship_file = os.path.join(omop_vocabs_path, 'CONCEPT_RELATIONSHIP.csv')
         condition_occurrence_file = os.path.join(input_data_path, 'condition_occurrence.csv')
         visit_occurrence_file = os.path.join(input_data_path, 'visit_occurrence.csv')
+        query_drug_exposure = os.path.join(input_data_path, 'drug_exposure.csv')
 
         # Load data from CSV
         df_concept = pd.read_csv(concept_file, sep="\t", dtype=str)
         df_cond_occurence = pd.read_csv(condition_occurrence_file, dtype=str)
         df_concept_relationship = pd.read_csv(concept_relationship_file, sep="\t", dtype=str)
         df_visit_occurrence = pd.read_csv(visit_occurrence_file, dtype=str)
+        df_drug_exposure = pd.read_csv(query_drug_exposure, dtype=str)
 
     elif db_name=='postgres':
         # Database Mode
@@ -35,12 +37,14 @@ def OMOP_to_ICD9_conversion(args=None, db_name="postgres", db_config=None,save_c
         query_concept_relationship = "SELECT * FROM \"CONCEPT_RELATIONSHIP\";"
         query_condition_occurrence = "SELECT * FROM \"condition_occurrence\";"
         query_visit_occurrence = "SELECT * FROM \"visit_occurrence\";"
+        query_drug_exposure = "SELECT * FROM \"drug_exposure\";"
 
         # Load data from Database
         df_concept = pd.read_sql(query_concept, db_engine)
         df_concept_relationship = pd.read_sql(query_concept_relationship, db_engine)
         df_cond_occurence = pd.read_sql(query_condition_occurrence, db_engine)
         df_visit_occurrence = pd.read_sql(query_visit_occurrence, db_engine)
+        df_drug_exposure = pd.read_sql(query_drug_exposure, dtype=str)
     elif db_name=='sql':
         # Database Mode
         try:
@@ -54,12 +58,14 @@ def OMOP_to_ICD9_conversion(args=None, db_name="postgres", db_config=None,save_c
         query_concept_relationship = "SELECT * FROM concept_relationship;"
         query_condition_occurrence = "SELECT * FROM condition_occurrence;"
         query_visit_occurrence = "SELECT * FROM visit_occurrence;"
+        query_drug_exposure = "SELECT * FROM drug_exposure;"
 
         # Load data from Database
         df_concept = pd.read_sql(query_concept, db_engine)
         df_concept_relationship = pd.read_sql(query_concept_relationship, db_engine)
         df_cond_occurence = pd.read_sql(query_condition_occurrence, db_engine)
         df_visit_occurrence = pd.read_sql(query_visit_occurrence, db_engine)
+        df_drug_exposure = pd.read_csv(query_drug_exposure, dtype=str)
 
 
     # Step 1: Filter df_concept to only ICD-9 concepts
@@ -154,6 +160,15 @@ def OMOP_to_ICD9_conversion(args=None, db_name="postgres", db_config=None,save_c
     
     merged_df_with_visit_clean['visit_start_datetime'] = pd.to_datetime(merged_df_with_visit_clean['visit_start_datetime'])
     merged_df_with_visit_clean = merged_df_with_visit_clean.sort_values('visit_start_datetime').reset_index(drop=True)
+
+    # merge drug_exposure with merged_df_with_visit_clean
+    df_drug_exposure = df_drug_exposure.merge(df_concept[['concept_id', 'concept_name']], left_on='drug_concept_id', right_on='concept_id', how='left').rename(columns={'concept_name': 'drug_name'}).drop(columns=['concept_id'])
+    merged_df_with_visit_clean = merged_df_with_visit_clean.merge(df_drug_exposure[['person_id', 'drug_concept_id','drug_name', 'drug_exposure_start_date','visit_occurrence_id']], on='visit_occurrence_id', how='left')\
+        .drop(columns=['person_id_y']).rename(columns={'person_id_x': 'person_id'})
+    
+    # df_person = df_person.merge(df_concept[['concept_id', 'concept_name']], left_on='gender_concept_id', right_on='concept_id', how='left').rename(columns={'concept_name': 'gender'}).drop(columns=['concept_id'])
+    # df_person = df_person.merge(df_concept[['concept_id', 'concept_name']], left_on='race_concept_id', right_on='concept_id', how='left').rename(columns={'concept_name': 'race'}).drop(columns=['concept_id'])
+
     
     if save_csv:
         merged_df_with_visit_clean.to_csv('synthea1k_ICD9.csv',index=True)
